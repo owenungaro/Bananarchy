@@ -43,11 +43,12 @@ while running:
         elif ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1:
             # sidebar click
             if mx > usable_sw:
-                # detect top-level buttons
                 btn_y = config.PANEL_PADDING
                 btn_h = font.get_height() + config.PANEL_PADDING
+                btn_x = usable_sw + config.PANEL_PADDING
+
                 # Tools button
-                if config.PANEL_PADDING <= my < btn_y + btn_h:
+                if btn_y <= my < btn_y + btn_h:
                     current_page = PAGE_TOOLS
                 # Erase button
                 elif btn_y + btn_h <= my < btn_y + 2 * btn_h:
@@ -55,11 +56,24 @@ while running:
                 # Info button
                 elif btn_y + 2 * btn_h <= my < btn_y + 3 * btn_h:
                     current_page = PAGE_INFO
-                # if on tools page, check tool icons
+                # Upgrade click in Info page
+                elif current_page == PAGE_INFO and info_cell:
+                    # compute info block height
+                    line_count = 3
+                    start_y = btn_y + 3 * btn_h
+                    text_y = start_y + line_count * (font.get_height() + 2)
+                    up_x = btn_x
+                    up_y = text_y + config.PANEL_PADDING
+                    up_w = config.PANEL_WIDTH - 2 * config.PANEL_PADDING
+                    up_h = font.get_height() + config.PANEL_PADDING // 2
+                    upgr_btn = pygame.Rect(up_x, up_y, up_w, up_h)
+                    if upgr_btn.collidepoint(mx, my):
+                        gx, gy = info_cell
+                        world.upgrade_tile(tile_data, gx, gy)
+                # Tools icons
                 elif current_page == PAGE_TOOLS:
-                    idx = (my - (btn_y + 3 * btn_h)) // (
-                        config.ICON_SIZE + config.PANEL_PADDING
-                    )
+                    start_y = btn_y + 3 * btn_h
+                    idx = (my - start_y) // (config.ICON_SIZE + config.PANEL_PADDING)
                     if 0 <= idx < len(world.TOOLS):
                         world.set_selected_tool(idx)
             else:
@@ -67,11 +81,10 @@ while running:
                 gx, gy = render.find_clicked_tile(mx, my, tw, th, ox, oy)
                 if gx is not None:
                     if current_page == PAGE_ERASE:
-                        cell = tile_data[gy][gx]
-                        cell["building"] = None
+                        tile_data[gy][gx]["building"] = None
                     elif current_page == PAGE_INFO:
                         info_cell = (gx, gy)
-                    else:  # tools page
+                    else:  # Tools page
                         kind, key = world.get_selected_tool()
                         cell = tile_data[gy][gx]
                         if kind == "building":
@@ -98,18 +111,15 @@ while running:
         screen, config.COLORS["panel_bg"], (usable_sw, 0, config.PANEL_WIDTH, sh)
     )
 
-    # top-level buttons
+    # top-level buttons text
     btn_x = usable_sw + config.PANEL_PADDING
     btn_y = config.PANEL_PADDING
     btn_h = font.get_height() + config.PANEL_PADDING
-    # Tools
     screen.blit(font.render("Tools", True, (255, 255, 255)), (btn_x, btn_y))
-    # Erase
     screen.blit(font.render("Erase", True, (255, 255, 255)), (btn_x, btn_y + btn_h))
-    # Info
     screen.blit(font.render("Info", True, (255, 255, 255)), (btn_x, btn_y + 2 * btn_h))
 
-    # highlight button
+    # highlight selected button
     if current_page == PAGE_TOOLS:
         highlight_y = btn_y
     elif current_page == PAGE_ERASE:
@@ -165,6 +175,17 @@ while running:
         for line in info_lines:
             screen.blit(font.render(line, True, (255, 255, 255)), (btn_x, text_y))
             text_y += font.get_height() + 2
+        # draw upgrade button only if upgradable building
+        if bld and bld.name not in ("Chimp Chest", "Conveyer Belt"):
+            up_x = btn_x
+            up_y = text_y + config.PANEL_PADDING
+            up_w = config.PANEL_WIDTH - 2 * config.PANEL_PADDING
+            up_h = font.get_height() + config.PANEL_PADDING // 2
+            pygame.draw.rect(screen, config.COLORS["side1"], (up_x, up_y, up_w, up_h))
+            screen.blit(
+                font.render("Upgrade", True, (255, 255, 255)),
+                (up_x + config.PANEL_PADDING // 2, up_y + config.PANEL_PADDING // 2),
+            )
 
     # display inventory
     totals = defaultdict(int)

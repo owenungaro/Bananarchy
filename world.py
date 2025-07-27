@@ -99,10 +99,9 @@ def place_terrain(world_grid, x: int, y: int, terrain_key: str):
         cell["building"] = None
 
 
-def upgrade_tile(world_grid, x: int, y: int):
+def upgrade_tile(world_grid, x, y):
     cell = world_grid[y][x]
-    if cell["building"] and cell["level"] == 1:
-        cell["level"] = 2
+    cell["level"] += 1
 
 
 def simulate_tick(world_grid):
@@ -135,7 +134,7 @@ def simulate_tick(world_grid):
 
                 # produce + deposit outputs
                 for res, prod in bld.outputs.items():
-                    amount = prod * lvl
+                    amount = prod * (2 ** (cell["level"] - 1))
 
                     # BFS to find reachable chimp chest
                     visited = set()
