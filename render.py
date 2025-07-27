@@ -118,7 +118,7 @@ def draw_block(screen, x, y, cell, tw, th, ox, oy):
     # building icon
     bld = cell["building"]
     if bld:
-        cx, cy, sz = px + tw // 2, py + th // 2, tw // 4
+        cx, cy, sz = px + tw // 2, py + th // 2, tw // 6
         if bld.shape == "square":
             pygame.draw.rect(screen, bld.color, (cx - sz, cy - sz, 2 * sz, 2 * sz))
         elif bld.shape == "circle":

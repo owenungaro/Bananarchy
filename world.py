@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from collections import defaultdict
 from typing import Dict, List, Tuple
 import config
@@ -8,15 +8,16 @@ import config
 class Building:
     id: int
     name: str
-    shape: str  # "circle", "square", "triangle", etc.
+    shape: str
     color: Tuple[int, int, int]
     inputs: Dict[str, int]
     outputs: Dict[str, int]
+    allowed_terrains: List[str] = field(default_factory=list)
 
 
 @dataclass
 class Terrain:
-    key: str  # unique string ID
+    key: str
     name: str
     color: Tuple[int, int, int]
 
@@ -25,22 +26,42 @@ TERRAINS_LIST: List[Terrain] = [
     Terrain("forest", "Forest", (34, 139, 34)),
     Terrain("rock", "Rock", (128, 128, 128)),
 ]
+TERRAINS: Dict[str, Terrain] = {t.key: t for t in TERRAINS_LIST}
 
 BUILDINGS_LIST: List[Building] = [
-    Building(1, "Banana Grove", "circle", (255, 255, 100), {}, {"raw_banana": 100}),
-    Building(2, "Bamboo Thicket", "circle", (50, 200, 50), {}, {"bamboo": 80}),
-    Building(3, "Clay Pit", "circle", (200, 160, 130), {}, {"clay": 40}),
+    Building(
+        id=1,
+        name="Banana Grove",
+        shape="circle",
+        color=(255, 255, 100),
+        inputs={},
+        outputs={"raw_banana": 100},
+        allowed_terrains=["forest"],
+    ),
+    Building(
+        id=2,
+        name="Bamboo Thicket",
+        shape="circle",
+        color=(50, 200, 50),
+        inputs={},
+        outputs={"bamboo": 80},
+        allowed_terrains=["forest"],
+    ),
+    Building(
+        id=3,
+        name="Clay Pit",
+        shape="circle",
+        color=(200, 160, 130),
+        inputs={},
+        outputs={"clay": 40},
+        allowed_terrains=["rock"],
+    ),
 ]
-
-# lookup dicts
-TERRAINS: Dict[str, Terrain] = {t.key: t for t in TERRAINS_LIST}
 BUILDINGS: Dict[int, Building] = {b.id: b for b in BUILDINGS_LIST}
 
-# unified tool list for sidebar: each entry is ("terrain", terrain_key) or ("building", building_id)
 TOOLS: List[Tuple[str, object]] = [("terrain", t.key) for t in TERRAINS_LIST] + [
     ("building", b.id) for b in BUILDINGS_LIST
 ]
-
 _selected_tool: int = 0
 
 
@@ -49,19 +70,18 @@ def set_selected_tool(idx: int):
     _selected_tool = idx % len(TOOLS)
 
 
-def get_selected_tool():
-    """Returns (kind, key) for the current sidebar selection."""
+def get_selected_tool() -> Tuple[str, object]:
     return TOOLS[_selected_tool]
 
 
-# World state management
+# World grid management
 
 
 def init_world(width: int, height: int):
     """
-    Create a 2D array of cells. Each cell is a dict:
-      - 'building': None or a Building
-      - 'terrain' : None or a terrain key
+    Returns a heightxwidth grid of cells. Each cell is a dict with:
+      - 'building': None or Building
+      - 'terrain' : None or terrain key
       - 'inventory': defaultdict(int)
       - 'level'   : int
     """
@@ -80,7 +100,7 @@ def init_world(width: int, height: int):
 
 
 def update_tile(world, x: int, y: int, b: Building):
-    """Place/replace a building and reset its level."""
+    """Place (or replace) a building and reset its level."""
     cell = world[y][x]
     cell["building"] = b
     cell["level"] = 1
@@ -93,14 +113,14 @@ def place_terrain(world, x: int, y: int, terrain_key: str):
 
 
 def upgrade_tile(world, x: int, y: int):
-    """Example upgrade logic (level 1→2)."""
+    """Simple upgrade logic: level 1→2."""
     cell = world[y][x]
     if cell["building"] and cell["level"] == 1:
         cell["level"] = 2
 
 
 def simulate_tick(world):
-    """Example production logic."""
+    """Example resource‐production tick."""
     for row in world:
         for cell in row:
             bld = cell["building"]
@@ -113,8 +133,9 @@ def simulate_tick(world):
                 if inv[res] < req * lvl:
                     break
             else:
-                # consume & produce
+                # consume inputs
                 for res, req in bld.inputs.items():
                     inv[res] -= req * lvl
+                # produce outputs
                 for res, prod in bld.outputs.items():
                     inv[res] += prod * lvl
