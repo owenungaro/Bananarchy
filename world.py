@@ -115,7 +115,7 @@ def simulate_tick(world_grid):
     """
     For each building, if it can produce (inputs available),
     consume inputs, then for each output:
-      - if a Chimp Chest is adjacent (N/S/E/W), deposit there
+      - if a Chimp Chest is reachable via adjacent conveyor belts, deposit there
       - otherwise leave it in this building’s inventory
     """
     H = len(world_grid)
@@ -142,18 +142,35 @@ def simulate_tick(world_grid):
                 # produce + deposit outputs
                 for res, prod in bld.outputs.items():
                     amount = prod * lvl
+
+                    # BFS to find reachable chimp chest
+                    visited = set()
+                    queue = [(x, y)]
                     deposited = False
 
-                    # look for adjacent chest
-                    for dx, dy in [(1, 0), (-1, 0), (0, 1), (0, -1)]:
-                        nx, ny = x + dx, y + dy
-                        if 0 <= nx < W and 0 <= ny < H:
-                            neigh = world_grid[ny][nx]
-                            nbld = neigh["building"]
-                            if nbld and nbld.name == "Chimp Chest":
-                                neigh["inventory"][res] += amount
-                                deposited = True
-                                break
+                    while queue:
+                        cx, cy = queue.pop(0)
+                        if (cx, cy) in visited:
+                            continue
+                        visited.add((cx, cy))
+
+                        for dx, dy in [(1, 0), (-1, 0), (0, 1), (0, -1)]:
+                            nx, ny = cx + dx, cy + dy
+                            if not (0 <= nx < W and 0 <= ny < H):
+                                continue
+                            neighbor = world_grid[ny][nx]
+                            nbld = neighbor["building"]
+
+                            if (nx, ny) in visited:
+                                continue
+                            if nbld:
+                                if nbld.name == "Chimp Chest":
+                                    neighbor["inventory"][res] += amount
+                                    deposited = True
+                                    queue = []  # exit BFS
+                                    break
+                                elif nbld.name == "Conveyer Belt":
+                                    queue.append((nx, ny))
 
                     if not deposited:
                         inv[res] += amount
