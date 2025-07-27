@@ -1,5 +1,3 @@
-# world.py
-
 from dataclasses import dataclass, field
 from collections import defaultdict
 from typing import Dict, List, Tuple
@@ -32,42 +30,21 @@ TERRAINS_LIST: List[Terrain] = [
 TERRAINS: Dict[str, Terrain] = {t.key: t for t in TERRAINS_LIST}
 
 BUILDINGS_LIST: List[Building] = [
+    Building(1, "Chimp Chest", "circle", (255, 0, 0), {}, {}, ["base"]),
+    Building(2, "Conveyer Belt", "square", (0, 0, 0), {}, {}, ["base"]),
     Building(
-        id=4,
-        name="Chimp Chest",
-        shape="circle",
-        color=(255, 0, 0),
-        inputs={},
-        outputs={},
-        allowed_terrains=["base"],
+        3,
+        "Banana Grove",
+        "circle",
+        (255, 255, 100),
+        {},
+        {"raw_banana": 1},
+        ["forest"],
     ),
     Building(
-        id=1,
-        name="Banana Grove",
-        shape="circle",
-        color=(255, 255, 100),
-        inputs={},
-        outputs={"raw_banana": 100},
-        allowed_terrains=["forest"],
+        4, "Bamboo Thicket", "circle", (50, 200, 50), {}, {"bamboo": 1}, ["forest"]
     ),
-    Building(
-        id=2,
-        name="Bamboo Thicket",
-        shape="circle",
-        color=(50, 200, 50),
-        inputs={},
-        outputs={"bamboo": 80},
-        allowed_terrains=["forest"],
-    ),
-    Building(
-        id=3,
-        name="Clay Pit",
-        shape="circle",
-        color=(200, 160, 130),
-        inputs={},
-        outputs={"clay": 40},
-        allowed_terrains=["rock"],
-    ),
+    Building(5, "Clay Pit", "circle", (200, 160, 130), {}, {"clay": 1}, ["rock"]),
 ]
 BUILDINGS: Dict[int, Building] = {b.id: b for b in BUILDINGS_LIST}
 
@@ -86,13 +63,11 @@ def get_selected_tool() -> Tuple[str, object]:
     return TOOLS[_selected_tool]
 
 
-# World Grid Management
-
-
+# World Grid management
 def init_world(width: int, height: int):
     """
-    Returns a height x width grid of cells. Each cell:
-      - 'building': None or Building
+    Create a height X width grid of cells. Each cell is a dict:
+      - 'building': None or a Building
       - 'terrain' : starts as 'base'
       - 'inventory': defaultdict(int)
       - 'level'   : int
@@ -112,44 +87,73 @@ def init_world(width: int, height: int):
     ]
 
 
-def update_tile(world, x: int, y: int, b: Building):
-    cell = world[y][x]
+def update_tile(world_grid, x: int, y: int, b: Building):
+    cell = world_grid[y][x]
     cell["building"] = b
     cell["level"] = 1
 
 
-def place_terrain(world, x: int, y: int, terrain_key: str):
+def place_terrain(world_grid, x: int, y: int, terrain_key: str):
     """
     Paint a terrain type—and if an existing building
-    isn't allowed on it, drop that building.
+    isn’t allowed on it, remove that building.
     """
-    cell = world[y][x]
+    cell = world_grid[y][x]
     cell["terrain"] = terrain_key
     bld = cell["building"]
     if bld and terrain_key not in bld.allowed_terrains:
         cell["building"] = None
 
 
-def upgrade_tile(world, x: int, y: int):
-    cell = world[y][x]
+def upgrade_tile(world_grid, x: int, y: int):
+    cell = world_grid[y][x]
     if cell["building"] and cell["level"] == 1:
         cell["level"] = 2
 
 
-def simulate_tick(world):
-    for row in world:
-        for cell in row:
+def simulate_tick(world_grid):
+    """
+    For each building, if it can produce (inputs available),
+    consume inputs, then for each output:
+      - if a Chimp Chest is adjacent (N/S/E/W), deposit there
+      - otherwise leave it in this building’s inventory
+    """
+    H = len(world_grid)
+    W = len(world_grid[0]) if H else 0
+
+    for y in range(H):
+        for x in range(W):
+            cell = world_grid[y][x]
             bld = cell["building"]
             lvl = cell["level"]
-            if not bld:
+            if not bld or not bld.outputs:
                 continue
+
             inv = cell["inventory"]
             # check inputs
             for res, req in bld.inputs.items():
                 if inv[res] < req * lvl:
                     break
             else:
+                # consume inputs
                 for res, req in bld.inputs.items():
                     inv[res] -= req * lvl
+
+                # produce + deposit outputs
                 for res, prod in bld.outputs.items():
-                    inv[res] += prod * lvl
+                    amount = prod * lvl
+                    deposited = False
+
+                    # look for adjacent chest
+                    for dx, dy in [(1, 0), (-1, 0), (0, 1), (0, -1)]:
+                        nx, ny = x + dx, y + dy
+                        if 0 <= nx < W and 0 <= ny < H:
+                            neigh = world_grid[ny][nx]
+                            nbld = neigh["building"]
+                            if nbld and nbld.name == "Chimp Chest":
+                                neigh["inventory"][res] += amount
+                                deposited = True
+                                break
+
+                    if not deposited:
+                        inv[res] += amount
