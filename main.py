@@ -58,8 +58,8 @@ while running:
                     current_page = PAGE_INFO
                 # Upgrade click in Info page
                 elif current_page == PAGE_INFO and info_cell:
-                    # compute info block height
-                    line_count = 3
+                    # compute info block height (4 lines now)
+                    line_count = 4  # will adjust based on building presence
                     start_y = btn_y + 3 * btn_h
                     text_y = start_y + line_count * (font.get_height() + 2)
                     up_x = btn_x
@@ -169,8 +169,12 @@ while running:
         info_lines = [
             f"Tile ({gx},{gy})",
             f"Terrain: {terrain}",
-            f"Building: {bld.name if bld else 'None'}",
         ]
+        if bld:
+            info_lines.append(f"Building: {bld.name}")
+            info_lines.append(f"Level: {cell['level']}")
+        else:
+            info_lines.append("Building: None")
         text_y = btn_y + 3 * btn_h
         for line in info_lines:
             screen.blit(font.render(line, True, (255, 255, 255)), (btn_x, text_y))
