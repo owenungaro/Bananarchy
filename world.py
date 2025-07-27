@@ -1,115 +1,120 @@
-# world.py
+from dataclasses import dataclass
 from collections import defaultdict
-from resources import RESOURCES
-
-BUILDINGS = {
-    # ── Tier I: Gatherers ───────────────────────────────────────────────────────
-    1: {
-        "name": "Banana Grove",
-        "color": (255, 255, 100),
-        "shape": "circle",
-        "inputs": {},
-        "outputs": {"raw_banana": 100},
-    },
-    2: {
-        "name": "Bamboo Thicket",
-        "color": (50, 200, 50),
-        "shape": "square",
-        "inputs": {},
-        "outputs": {"bamboo": 80},
-    },
-    3: {
-        "name": "Clay Pit",
-        "color": (200, 160, 130),
-        "shape": "triangle",
-        "inputs": {},
-        "outputs": {"clay": 40},
-    },
-    # 4: {
-    #     "name": "Coconut Grove",
-    #     "color": (200, 200, 150),
-    #     "shape": "circle",
-    #     "inputs": {"clay": 80},
-    #     "outputs": {"coconut": 50},
-    # },
-    # 5: {
-    #     "name": "Jungle Quarry",
-    #     "color": (120, 120, 120),
-    #     "shape": "square",
-    #     "inputs": {"clay": 40},
-    #     "outputs": {"jungle_stone": 30},
-    # },
-    # 6: {
-    #     "name": "River Mine",
-    #     "color": (100, 100, 120),
-    #     "shape": "square",
-    #     "inputs": {"clay": 60, "jungle_stone": 60},
-    #     "outputs": {"ore": 20},
-    # },
-}
-
-selected_building = 1
+from typing import Dict, List, Tuple
+import config
 
 
-def set_selected_building(bid):
-    global selected_building
-    selected_building = bid
+@dataclass
+class Building:
+    id: int
+    name: str
+    shape: str  # "circle", "square", "triangle", etc.
+    color: Tuple[int, int, int]
+    inputs: Dict[str, int]
+    outputs: Dict[str, int]
 
 
-def init_world(width, height):
+@dataclass
+class Terrain:
+    key: str  # unique string ID
+    name: str
+    color: Tuple[int, int, int]
+
+
+TERRAINS_LIST: List[Terrain] = [
+    Terrain("forest", "Forest", (34, 139, 34)),
+    Terrain("rock", "Rock", (128, 128, 128)),
+]
+
+BUILDINGS_LIST: List[Building] = [
+    Building(1, "Banana Grove", "circle", (255, 255, 100), {}, {"raw_banana": 100}),
+    Building(2, "Bamboo Thicket", "circle", (50, 200, 50), {}, {"bamboo": 80}),
+    Building(3, "Clay Pit", "circle", (200, 160, 130), {}, {"clay": 40}),
+]
+
+# lookup dicts
+TERRAINS: Dict[str, Terrain] = {t.key: t for t in TERRAINS_LIST}
+BUILDINGS: Dict[int, Building] = {b.id: b for b in BUILDINGS_LIST}
+
+# unified tool list for sidebar: each entry is ("terrain", terrain_key) or ("building", building_id)
+TOOLS: List[Tuple[str, object]] = [("terrain", t.key) for t in TERRAINS_LIST] + [
+    ("building", b.id) for b in BUILDINGS_LIST
+]
+
+_selected_tool: int = 0
+
+
+def set_selected_tool(idx: int):
+    global _selected_tool
+    _selected_tool = idx % len(TOOLS)
+
+
+def get_selected_tool():
+    """Returns (kind, key) for the current sidebar selection."""
+    return TOOLS[_selected_tool]
+
+
+# World state management
+
+
+def init_world(width: int, height: int):
     """
-    Each tile holds:
-      - 'building': None or a BUILDINGS entry
-      - 'inventory': resource counts
-      - 'level': upgrade level (1 or 2)
+    Create a 2D array of cells. Each cell is a dict:
+      - 'building': None or a Building
+      - 'terrain' : None or a terrain key
+      - 'inventory': defaultdict(int)
+      - 'level'   : int
     """
     return [
         [
-            {"building": None, "inventory": defaultdict(int), "level": 1}
+            {
+                "building": None,
+                "terrain": None,
+                "inventory": defaultdict(int),
+                "level": 1,
+            }
             for _ in range(width)
         ]
         for _ in range(height)
     ]
 
 
-def update_tile(world, x, y, building):
-    """Place a building and reset its level to 1."""
+def update_tile(world, x: int, y: int, b: Building):
+    """Place/replace a building and reset its level."""
     cell = world[y][x]
-    cell["building"] = building
+    cell["building"] = b
     cell["level"] = 1
 
 
-def upgrade_tile(world, x, y):
-    """Upgrade a building once (level 1→2), doubling its I/O."""
+def place_terrain(world, x: int, y: int, terrain_key: str):
+    """Paint a terrain type onto this cell."""
+    cell = world[y][x]
+    cell["terrain"] = terrain_key
+
+
+def upgrade_tile(world, x: int, y: int):
+    """Example upgrade logic (level 1→2)."""
     cell = world[y][x]
     if cell["building"] and cell["level"] == 1:
         cell["level"] = 2
 
 
 def simulate_tick(world):
-    """
-    Each tick, every building that has enough inputs will:
-      - consume (inputs × level)
-      - produce (outputs × level)
-    """
-    H, W = len(world), len(world[0])
-    for y in range(H):
-        for x in range(W):
-            cell = world[y][x]
+    """Example production logic."""
+    for row in world:
+        for cell in row:
             bld = cell["building"]
             lvl = cell["level"]
             if not bld:
                 continue
-
             inv = cell["inventory"]
-            # Check inputs
-            for res, req in bld["inputs"].items():
+            # check inputs
+            for res, req in bld.inputs.items():
                 if inv[res] < req * lvl:
                     break
             else:
-                # Consume inputs
-                for res, req in bld["inputs"].items():
+                # consume & produce
+                for res, req in bld.inputs.items():
                     inv[res] -= req * lvl
-                # Produce outputs
-                for res, prod in bld["outputs"].items():
+                for res, prod in bld.outputs.items():
                     inv[res] += prod * lvl
