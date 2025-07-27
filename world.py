@@ -1,3 +1,5 @@
+# world.py
+
 from dataclasses import dataclass, field
 from collections import defaultdict
 from typing import Dict, List, Tuple
@@ -23,12 +25,22 @@ class Terrain:
 
 
 TERRAINS_LIST: List[Terrain] = [
+    Terrain("base", "Base", (240, 240, 240)),
     Terrain("forest", "Forest", (34, 139, 34)),
     Terrain("rock", "Rock", (128, 128, 128)),
 ]
 TERRAINS: Dict[str, Terrain] = {t.key: t for t in TERRAINS_LIST}
 
 BUILDINGS_LIST: List[Building] = [
+    Building(
+        id=4,
+        name="Chimp Chest",
+        shape="circle",
+        color=(255, 0, 0),
+        inputs={},
+        outputs={},
+        allowed_terrains=["base"],
+    ),
     Building(
         id=1,
         name="Banana Grove",
@@ -74,22 +86,23 @@ def get_selected_tool() -> Tuple[str, object]:
     return TOOLS[_selected_tool]
 
 
-# World grid management
+# World Grid Management
 
 
 def init_world(width: int, height: int):
     """
-    Returns a heightxwidth grid of cells. Each cell is a dict with:
+    Returns a height x width grid of cells. Each cell:
       - 'building': None or Building
-      - 'terrain' : None or terrain key
+      - 'terrain' : starts as 'base'
       - 'inventory': defaultdict(int)
       - 'level'   : int
     """
+    default = TERRAINS_LIST[0].key  # "base"
     return [
         [
             {
                 "building": None,
-                "terrain": None,
+                "terrain": default,
                 "inventory": defaultdict(int),
                 "level": 1,
             }
@@ -100,14 +113,16 @@ def init_world(width: int, height: int):
 
 
 def update_tile(world, x: int, y: int, b: Building):
-    """Place (or replace) a building and reset its level."""
     cell = world[y][x]
     cell["building"] = b
     cell["level"] = 1
 
 
 def place_terrain(world, x: int, y: int, terrain_key: str):
-    """Paint a terrain type onto this cell."""
+    """
+    Paint a terrain type—and if an existing building
+    isn't allowed on it, drop that building.
+    """
     cell = world[y][x]
     cell["terrain"] = terrain_key
     bld = cell["building"]
@@ -116,14 +131,12 @@ def place_terrain(world, x: int, y: int, terrain_key: str):
 
 
 def upgrade_tile(world, x: int, y: int):
-    """Simple upgrade logic: level 1→2."""
     cell = world[y][x]
     if cell["building"] and cell["level"] == 1:
         cell["level"] = 2
 
 
 def simulate_tick(world):
-    """Example resource-production tick."""
     for row in world:
         for cell in row:
             bld = cell["building"]
@@ -136,9 +149,7 @@ def simulate_tick(world):
                 if inv[res] < req * lvl:
                     break
             else:
-                # consume inputs
                 for res, req in bld.inputs.items():
                     inv[res] -= req * lvl
-                # produce outputs
                 for res, prod in bld.outputs.items():
                     inv[res] += prod * lvl
