@@ -16,6 +16,13 @@ clock, font = pygame.time.Clock(), pygame.font.SysFont(None, 24)
 TICK_EVENT = pygame.USEREVENT + 1
 pygame.time.set_timer(TICK_EVENT, 2000)
 
+# UI pages
+PAGE_TOOLS = 0
+PAGE_ERASE = 1
+PAGE_INFO = 2
+current_page = PAGE_TOOLS
+info_cell = None
+
 running = True
 while running:
     sw, sh = screen.get_size()
@@ -23,7 +30,6 @@ while running:
     tw, th, ox, oy = render.calculate_scaling(usable_sw, sh)
 
     mx, my = pygame.mouse.get_pos()
-    # compute hover only when over map
     if mx < usable_sw:
         hover = render.find_clicked_tile(mx, my, tw, th, ox, oy)
     else:
@@ -34,36 +40,51 @@ while running:
             running = False
         elif ev.type == pygame.VIDEORESIZE:
             screen = pygame.display.set_mode((ev.w, ev.h), pygame.RESIZABLE)
-
         elif ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1:
-            # sidebar click?
+            # sidebar click
             if mx > usable_sw:
-                idx = (my - config.PANEL_PADDING) // (
-                    config.ICON_SIZE + config.PANEL_PADDING
-                )
-                if 0 <= idx < len(world.TOOLS):
-                    world.set_selected_tool(idx)
+                # detect top-level buttons
+                btn_y = config.PANEL_PADDING
+                btn_h = font.get_height() + config.PANEL_PADDING
+                # Tools button
+                if config.PANEL_PADDING <= my < btn_y + btn_h:
+                    current_page = PAGE_TOOLS
+                # Erase button
+                elif btn_y + btn_h <= my < btn_y + 2 * btn_h:
+                    current_page = PAGE_ERASE
+                # Info button
+                elif btn_y + 2 * btn_h <= my < btn_y + 3 * btn_h:
+                    current_page = PAGE_INFO
+                # if on tools page, check tool icons
+                elif current_page == PAGE_TOOLS:
+                    idx = (my - (btn_y + 3 * btn_h)) // (
+                        config.ICON_SIZE + config.PANEL_PADDING
+                    )
+                    if 0 <= idx < len(world.TOOLS):
+                        world.set_selected_tool(idx)
             else:
-                # map click: paint terrain or place building
+                # map click
                 gx, gy = render.find_clicked_tile(mx, my, tw, th, ox, oy)
                 if gx is not None:
-                    kind, key = world.get_selected_tool()
-                    cell = tile_data[gy][gx]
-                    if kind == "building":
-                        bld = world.BUILDINGS[key]
-                        if cell["terrain"] in bld.allowed_terrains:
-                            update_tile(tile_data, gx, gy, bld)
+                    if current_page == PAGE_ERASE:
+                        cell = tile_data[gy][gx]
+                        cell["building"] = None
+                    elif current_page == PAGE_INFO:
+                        info_cell = (gx, gy)
+                    else:  # tools page
+                        kind, key = world.get_selected_tool()
+                        cell = tile_data[gy][gx]
+                        if kind == "building":
+                            bld = world.BUILDINGS[key]
+                            if cell["terrain"] in bld.allowed_terrains:
+                                update_tile(tile_data, gx, gy, bld)
                         else:
-                            print(f"Cannot place {bld.name} on '{cell['terrain']}'")
-                    else:
-                        place_terrain(tile_data, gx, gy, key)
-
+                            place_terrain(tile_data, gx, gy, key)
         elif ev.type == pygame.KEYDOWN:
             if ev.key == pygame.K_q:
                 world.set_selected_tool(world._selected_tool - 1)
             elif ev.key == pygame.K_e:
                 world.set_selected_tool(world._selected_tool + 1)
-
         elif ev.type == TICK_EVENT:
             world.simulate_tick(tile_data)
 
@@ -74,62 +95,91 @@ while running:
 
     # sidebar background
     pygame.draw.rect(
-        screen,
-        config.COLORS["panel_bg"],
-        (usable_sw, 0, config.PANEL_WIDTH, sh),
+        screen, config.COLORS["panel_bg"], (usable_sw, 0, config.PANEL_WIDTH, sh)
     )
 
-    # draw sidebar icons
-    for i, (kind, key) in enumerate(world.TOOLS):
-        x0 = usable_sw + config.PANEL_PADDING
-        y0 = config.PANEL_PADDING + i * (config.ICON_SIZE + config.PANEL_PADDING)
+    # top-level buttons
+    btn_x = usable_sw + config.PANEL_PADDING
+    btn_y = config.PANEL_PADDING
+    btn_h = font.get_height() + config.PANEL_PADDING
+    # Tools
+    screen.blit(font.render("Tools", True, (255, 255, 255)), (btn_x, btn_y))
+    # Erase
+    screen.blit(font.render("Erase", True, (255, 255, 255)), (btn_x, btn_y + btn_h))
+    # Info
+    screen.blit(font.render("Info", True, (255, 255, 255)), (btn_x, btn_y + 2 * btn_h))
 
-        if kind == "terrain":
-            col = world.TERRAINS[key].color
-            pts = [
-                (x0 + config.ICON_SIZE // 2, y0),
-                (x0 + config.ICON_SIZE, y0 + config.ICON_SIZE // 2),
-                (x0 + config.ICON_SIZE // 2, y0 + config.ICON_SIZE),
-                (x0, y0 + config.ICON_SIZE // 2),
-            ]
-            pygame.draw.polygon(screen, col, pts)
-        else:
-            b = world.BUILDINGS[key]
-            cx = x0 + config.ICON_SIZE // 2
-            cy = y0 + config.ICON_SIZE // 2
-            sz = config.ICON_SIZE // 2 - 4
-            pygame.draw.rect(screen, b.color, (cx - sz, cy - sz, 2 * sz, 2 * sz))
-
-        if i == world._selected_tool:
-            pygame.draw.rect(
-                screen,
-                config.COLORS["highlight"],
-                (x0 - 2, y0 - 2, config.ICON_SIZE + 4, config.ICON_SIZE + 4),
-                width=2,
-            )
-
-    # display mode text
-    kind, key = world.get_selected_tool()
-    name = world.BUILDINGS[key].name if kind == "building" else world.TERRAINS[key].name
-    screen.blit(
-        font.render(f"Mode: {kind.capitalize()} -> {name}", True, (255, 255, 255)),
-        (10, 10),
+    # highlight button
+    if current_page == PAGE_TOOLS:
+        highlight_y = btn_y
+    elif current_page == PAGE_ERASE:
+        highlight_y = btn_y + btn_h
+    else:
+        highlight_y = btn_y + 2 * btn_h
+    w = config.PANEL_WIDTH - 2 * config.PANEL_PADDING
+    pygame.draw.rect(
+        screen, config.COLORS["highlight"], (btn_x - 2, highlight_y - 2, w, btn_h), 2
     )
 
-    # Display inventory
+    # tools icons when in tools page
+    if current_page == PAGE_TOOLS:
+        start_y = btn_y + 3 * btn_h
+        for i, (kind, key) in enumerate(world.TOOLS):
+            x0 = usable_sw + config.PANEL_PADDING
+            y0 = start_y + i * (config.ICON_SIZE + config.PANEL_PADDING)
+            if kind == "terrain":
+                col = world.TERRAINS[key].color
+                pts = [
+                    (x0 + config.ICON_SIZE // 2, y0),
+                    (x0 + config.ICON_SIZE, y0 + config.ICON_SIZE // 2),
+                    (x0 + config.ICON_SIZE // 2, y0 + config.ICON_SIZE),
+                    (x0, y0 + config.ICON_SIZE // 2),
+                ]
+                pygame.draw.polygon(screen, col, pts)
+            else:
+                b = world.BUILDINGS[key]
+                cx = x0 + config.ICON_SIZE // 2
+                cy = y0 + config.ICON_SIZE // 2
+                sz = config.ICON_SIZE // 2 - 4
+                pygame.draw.rect(screen, b.color, (cx - sz, cy - sz, 2 * sz, 2 * sz))
+            if i == world._selected_tool:
+                pygame.draw.rect(
+                    screen,
+                    config.COLORS["highlight"],
+                    (x0 - 2, y0 - 2, config.ICON_SIZE + 4, config.ICON_SIZE + 4),
+                    2,
+                )
+
+    # info display
+    if current_page == PAGE_INFO and info_cell:
+        gx, gy = info_cell
+        cell = tile_data[gy][gx]
+        terrain = cell["terrain"]
+        bld = cell["building"]
+        info_lines = [
+            f"Tile ({gx},{gy})",
+            f"Terrain: {terrain}",
+            f"Building: {bld.name if bld else 'None'}",
+        ]
+        text_y = btn_y + 3 * btn_h
+        for line in info_lines:
+            screen.blit(font.render(line, True, (255, 255, 255)), (btn_x, text_y))
+            text_y += font.get_height() + 2
+
+    # display inventory
     totals = defaultdict(int)
     for row in tile_data:
         for cell in row:
-            bld = cell["building"]
-            if bld and bld.name == "Chimp Chest":
+            b = cell["building"]
+            if b and b.name == "Chimp Chest":
                 for res, qty in cell["inventory"].items():
                     totals[res] += qty
-
     y_off = 10 + font.get_height() + 8
     for res_key, info in resources.RESOURCES.items():
         qty = totals.get(res_key, 0)
-        text = f"{info['name']}: {qty}"
-        screen.blit(font.render(text, True, (255, 255, 255)), (10, y_off))
+        screen.blit(
+            font.render(f"{info['name']}: {qty}", True, (255, 255, 255)), (10, y_off)
+        )
         y_off += font.get_height() + 2
 
     pygame.display.flip()

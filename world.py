@@ -33,13 +33,7 @@ BUILDINGS_LIST: List[Building] = [
     Building(1, "Chimp Chest", "circle", (255, 0, 0), {}, {}, ["base"]),
     Building(2, "Conveyer Belt", "square", (0, 0, 0), {}, {}, ["base"]),
     Building(
-        3,
-        "Banana Grove",
-        "circle",
-        (255, 255, 100),
-        {},
-        {"raw_banana": 1},
-        ["forest"],
+        3, "Banana Grove", "circle", (255, 255, 100), {}, {"raw_banana": 1}, ["forest"]
     ),
     Building(
         4, "Bamboo Thicket", "circle", (50, 200, 50), {}, {"bamboo": 1}, ["forest"]
@@ -68,9 +62,9 @@ def init_world(width: int, height: int):
     """
     Create a height X width grid of cells. Each cell is a dict:
       - 'building': None or a Building
-      - 'terrain' : starts as 'base'
+      - 'terrain': starts as 'base'
       - 'inventory': defaultdict(int)
-      - 'level'   : int
+      - 'level': int
     """
     default = TERRAINS_LIST[0].key  # "base"
     return [
@@ -96,7 +90,7 @@ def update_tile(world_grid, x: int, y: int, b: Building):
 def place_terrain(world_grid, x: int, y: int, terrain_key: str):
     """
     Paint a terrain type—and if an existing building
-    isn’t allowed on it, remove that building.
+    isn't allowed on it, remove that building.
     """
     cell = world_grid[y][x]
     cell["terrain"] = terrain_key
@@ -116,7 +110,7 @@ def simulate_tick(world_grid):
     For each building, if it can produce (inputs available),
     consume inputs, then for each output:
       - if a Chimp Chest is reachable via adjacent conveyor belts, deposit there
-      - otherwise leave it in this building’s inventory
+      - otherwise leave it in this building's inventory
     """
     H = len(world_grid)
     W = len(world_grid[0]) if H else 0
