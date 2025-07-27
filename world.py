@@ -41,7 +41,7 @@ BUILDINGS_LIST: List[Building] = [
     Building(
         id=2,
         name="Bamboo Thicket",
-        shape="circle",
+        shape="square",
         color=(50, 200, 50),
         inputs={},
         outputs={"bamboo": 80},

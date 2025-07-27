@@ -109,7 +109,7 @@ while running:
     # display mode text
     kind, key = world.get_selected_tool()
     name = world.BUILDINGS[key].name if kind == "building" else world.TERRAINS[key].name
-    txt = font.render(f"Mode: {kind.capitalize()} → {name}", True, (255, 255, 255))
+    txt = font.render(f"Mode: {kind.capitalize()} -> {name}", True, (255, 255, 255))
     screen.blit(txt, (10, 10))
 
     pygame.display.flip()
