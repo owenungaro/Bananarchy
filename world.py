@@ -41,7 +41,7 @@ BUILDINGS_LIST: List[Building] = [
     Building(
         id=2,
         name="Bamboo Thicket",
-        shape="square",
+        shape="circle",
         color=(50, 200, 50),
         inputs={},
         outputs={"bamboo": 80},
@@ -110,6 +110,9 @@ def place_terrain(world, x: int, y: int, terrain_key: str):
     """Paint a terrain type onto this cell."""
     cell = world[y][x]
     cell["terrain"] = terrain_key
+    bld = cell["building"]
+    if bld and terrain_key not in bld.allowed_terrains:
+        cell["building"] = None
 
 
 def upgrade_tile(world, x: int, y: int):
@@ -120,7 +123,7 @@ def upgrade_tile(world, x: int, y: int):
 
 
 def simulate_tick(world):
-    """Example resource‐production tick."""
+    """Example resource-production tick."""
     for row in world:
         for cell in row:
             bld = cell["building"]
