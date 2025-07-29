@@ -39,6 +39,51 @@ BUILDINGS_LIST: List[Building] = [
         4, "Bamboo Thicket", "circle", (50, 200, 50), {}, {"bamboo": 1}, ["forest"]
     ),
     Building(5, "Clay Pit", "circle", (200, 160, 130), {}, {"clay": 1}, ["rock"]),
+    Building(
+        6,
+        "Splinter Shack",
+        "square",
+        (180, 120, 40),
+        {"bamboo": 1},
+        {"split_bamboo": 2},
+        ["forest"],
+    ),
+    Building(
+        7,
+        "Sticky Press",
+        "circle",
+        (255, 230, 60),
+        {"raw_banana": 2},
+        {"banana_pulp": 2},
+        ["base"],
+    ),
+    Building(
+        8,
+        "Mud Kiln",
+        "triangle",
+        (170, 100, 80),
+        {"clay": 2},
+        {"ceramic_shard": 2},
+        ["base"],
+    ),
+    Building(
+        9,
+        "Rope Twister",
+        "circle",
+        (100, 180, 100),
+        {"raw_banana": 1, "bamboo": 1},
+        {"jungle_rope": 2},
+        ["base"],
+    ),
+    Building(
+        10,
+        "Brick Smusher",
+        "square",
+        (150, 70, 50),
+        {"clay": 2, "split_bamboo": 2},
+        {"mudbrick": 2},
+        ["base"],
+    ),
 ]
 BUILDINGS: Dict[int, Building] = {b.id: b for b in BUILDINGS_LIST}
 
@@ -105,12 +150,6 @@ def upgrade_tile(world_grid, x, y):
 
 
 def simulate_tick(world_grid):
-    """
-    For each building, if it can produce (inputs available),
-    consume inputs, then for each output:
-      - if a Chimp Chest is reachable via adjacent conveyor belts, deposit there
-      - otherwise leave it in this building's inventory
-    """
     H = len(world_grid)
     W = len(world_grid[0]) if H else 0
 
@@ -122,48 +161,43 @@ def simulate_tick(world_grid):
             if not bld or not bld.outputs:
                 continue
 
-            inv = cell["inventory"]
-            # check inputs
-            for res, req in bld.inputs.items():
-                if inv[res] < req * lvl:
-                    break
-            else:
-                # consume inputs
-                for res, req in bld.inputs.items():
-                    inv[res] -= req * lvl
+            # Step 1: Find reachable chimp chests
+            visited = set()
+            queue = [(x, y)]
+            reachable_chests = []
 
-                # produce + deposit outputs
-                for res, prod in bld.outputs.items():
-                    amount = prod * (2 ** (cell["level"] - 1))
+            while queue:
+                cx, cy = queue.pop(0)
+                if (cx, cy) in visited:
+                    continue
+                visited.add((cx, cy))
 
-                    # BFS to find reachable chimp chest
-                    visited = set()
-                    queue = [(x, y)]
-                    deposited = False
+                for dx, dy in [(0, 1), (1, 0), (-1, 0), (0, -1)]:
+                    nx, ny = cx + dx, cy + dy
+                    if not (0 <= nx < W and 0 <= ny < H):
+                        continue
+                    neighbor = world_grid[ny][nx]
+                    nbld = neighbor["building"]
 
-                    while queue:
-                        cx, cy = queue.pop(0)
-                        if (cx, cy) in visited:
-                            continue
-                        visited.add((cx, cy))
+                    if (nx, ny) in visited:
+                        continue
+                    if nbld:
+                        if nbld.name == "Chimp Chest":
+                            reachable_chests.append((nx, ny))
+                        elif nbld.name == "Conveyer Belt":
+                            queue.append((nx, ny))
 
-                        for dx, dy in [(1, 0), (-1, 0), (0, 1), (0, -1)]:
-                            nx, ny = cx + dx, cy + dy
-                            if not (0 <= nx < W and 0 <= ny < H):
-                                continue
-                            neighbor = world_grid[ny][nx]
-                            nbld = neighbor["building"]
+            # Step 2: Check if all inputs are available in any single chimp chest
+            for chest_x, chest_y in reachable_chests:
+                chest = world_grid[chest_y][chest_x]
+                inventory = chest["inventory"]
+                if all(inventory[res] >= req * lvl for res, req in bld.inputs.items()):
+                    # Step 3: Deduct from chest
+                    for res, req in bld.inputs.items():
+                        inventory[res] -= req * lvl
 
-                            if (nx, ny) in visited:
-                                continue
-                            if nbld:
-                                if nbld.name == "Chimp Chest":
-                                    neighbor["inventory"][res] += amount
-                                    deposited = True
-                                    queue = []  # exit BFS
-                                    break
-                                elif nbld.name == "Conveyer Belt":
-                                    queue.append((nx, ny))
-
-                    if not deposited:
-                        inv[res] += amount
+                    # Step 4: Produce + deposit output
+                    for res, prod in bld.outputs.items():
+                        amount = prod * (2 ** (lvl - 1))
+                        chest["inventory"][res] += amount
+                    break  # only produce once per tick

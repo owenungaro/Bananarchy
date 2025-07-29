@@ -1,6 +1,6 @@
 # Map dimensions
-MAP_WIDTH = 10
-MAP_HEIGHT = 10
+MAP_WIDTH = 7
+MAP_HEIGHT = 7
 
 # Sidebar UI
 PANEL_WIDTH = 200
