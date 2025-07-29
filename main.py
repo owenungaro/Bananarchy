@@ -8,18 +8,16 @@ pygame.init()
 screen = pygame.display.set_mode((1000, 700), pygame.RESIZABLE)
 pygame.display.set_caption("Bananarchy")
 
-# initialize map
 tile_data = init_world(config.MAP_WIDTH, config.MAP_HEIGHT)
 clock, font = pygame.time.Clock(), pygame.font.SysFont(None, 24)
 
-# tick every 2 seconds
 TICK_EVENT = pygame.USEREVENT + 1
 pygame.time.set_timer(TICK_EVENT, 2000)
 
-# UI pages
 PAGE_TOOLS = 0
 PAGE_ERASE = 1
 PAGE_INFO = 2
+PAGE_STATS = 3
 current_page = PAGE_TOOLS
 info_cell = None
 
@@ -41,25 +39,21 @@ while running:
         elif ev.type == pygame.VIDEORESIZE:
             screen = pygame.display.set_mode((ev.w, ev.h), pygame.RESIZABLE)
         elif ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1:
-            # sidebar click
             if mx > usable_sw:
                 btn_y = config.PANEL_PADDING
                 btn_h = font.get_height() + config.PANEL_PADDING
                 btn_x = usable_sw + config.PANEL_PADDING
 
-                # Tools button
                 if btn_y <= my < btn_y + btn_h:
                     current_page = PAGE_TOOLS
-                # Erase button
                 elif btn_y + btn_h <= my < btn_y + 2 * btn_h:
                     current_page = PAGE_ERASE
-                # Info button
                 elif btn_y + 2 * btn_h <= my < btn_y + 3 * btn_h:
                     current_page = PAGE_INFO
-                # Upgrade click in Info page
+                elif btn_y + 3 * btn_h <= my < btn_y + 4 * btn_h:
+                    current_page = PAGE_STATS
                 elif current_page == PAGE_INFO and info_cell:
-                    # compute info block height (4 lines now)
-                    line_count = 4  # will adjust based on building presence
+                    line_count = 4
                     start_y = btn_y + 3 * btn_h
                     text_y = start_y + line_count * (font.get_height() + 2)
                     up_x = btn_x
@@ -70,21 +64,19 @@ while running:
                     if upgr_btn.collidepoint(mx, my):
                         gx, gy = info_cell
                         world.upgrade_tile(tile_data, gx, gy)
-                # Tools icons
                 elif current_page == PAGE_TOOLS:
-                    start_y = btn_y + 3 * btn_h
+                    start_y = btn_y + 4 * btn_h
                     idx = (my - start_y) // (config.ICON_SIZE + config.PANEL_PADDING)
                     if 0 <= idx < len(world.TOOLS):
                         world.set_selected_tool(idx)
             else:
-                # map click
                 gx, gy = render.find_clicked_tile(mx, my, tw, th, ox, oy)
                 if gx is not None:
                     if current_page == PAGE_ERASE:
                         tile_data[gy][gx]["building"] = None
                     elif current_page == PAGE_INFO:
                         info_cell = (gx, gy)
-                    else:  # Tools page
+                    else:
                         kind, key = world.get_selected_tool()
                         cell = tile_data[gy][gx]
                         if kind == "building":
@@ -106,34 +98,33 @@ while running:
     if hover[0] is not None:
         render.draw_highlight(screen, hover[0], hover[1], tw, th, ox, oy)
 
-    # sidebar background
     pygame.draw.rect(
         screen, config.COLORS["panel_bg"], (usable_sw, 0, config.PANEL_WIDTH, sh)
     )
 
-    # top-level buttons text
     btn_x = usable_sw + config.PANEL_PADDING
     btn_y = config.PANEL_PADDING
     btn_h = font.get_height() + config.PANEL_PADDING
     screen.blit(font.render("Tools", True, (255, 255, 255)), (btn_x, btn_y))
     screen.blit(font.render("Erase", True, (255, 255, 255)), (btn_x, btn_y + btn_h))
     screen.blit(font.render("Info", True, (255, 255, 255)), (btn_x, btn_y + 2 * btn_h))
+    screen.blit(font.render("Stats", True, (255, 255, 255)), (btn_x, btn_y + 3 * btn_h))
 
-    # highlight selected button
     if current_page == PAGE_TOOLS:
         highlight_y = btn_y
     elif current_page == PAGE_ERASE:
         highlight_y = btn_y + btn_h
-    else:
+    elif current_page == PAGE_INFO:
         highlight_y = btn_y + 2 * btn_h
+    else:
+        highlight_y = btn_y + 3 * btn_h
     w = config.PANEL_WIDTH - 2 * config.PANEL_PADDING
     pygame.draw.rect(
         screen, config.COLORS["highlight"], (btn_x - 2, highlight_y - 2, w, btn_h), 2
     )
 
-    # tools icons when in tools page
     if current_page == PAGE_TOOLS:
-        start_y = btn_y + 3 * btn_h
+        start_y = btn_y + 4 * btn_h
         for i, (kind, key) in enumerate(world.TOOLS):
             x0 = usable_sw + config.PANEL_PADDING
             y0 = start_y + i * (config.ICON_SIZE + config.PANEL_PADDING)
@@ -160,7 +151,6 @@ while running:
                     2,
                 )
 
-    # info display
     if current_page == PAGE_INFO and info_cell:
         gx, gy = info_cell
         cell = tile_data[gy][gx]
@@ -175,11 +165,10 @@ while running:
             info_lines.append(f"Level: {cell['level']}")
         else:
             info_lines.append("Building: None")
-        text_y = btn_y + 3 * btn_h
+        text_y = btn_y + 4 * btn_h
         for line in info_lines:
             screen.blit(font.render(line, True, (255, 255, 255)), (btn_x, text_y))
             text_y += font.get_height() + 2
-        # draw upgrade button only if upgradable building
         if bld and bld.name not in ("Chimp Chest", "Conveyer Belt"):
             up_x = btn_x
             up_y = text_y + config.PANEL_PADDING
@@ -191,7 +180,48 @@ while running:
                 (up_x + config.PANEL_PADDING // 2, up_y + config.PANEL_PADDING // 2),
             )
 
-    # display inventory
+    elif current_page == PAGE_STATS:
+        y = btn_y + 4 * btn_h
+        totals = defaultdict(int)
+        sources = defaultdict(list)
+
+        for row in tile_data:
+            for cell in row:
+                b = cell["building"]
+                lvl = cell["level"]
+                if not b:
+                    continue
+                for res, amt in b.outputs.items():
+                    net = amt * (2 ** (lvl - 1))
+                    totals[res] += net
+                    sources[res].append((b.name, lvl, net, "green"))
+                for res, amt in b.inputs.items():
+                    cost = amt * lvl
+                    totals[res] -= cost
+                    sources[res].append((b.name, lvl, -cost, "red"))
+
+        for res_key in resources.RESOURCES:
+            net = totals.get(res_key, 0)
+            color = (
+                (0, 255, 0)
+                if net > 0
+                else (255, 100, 100) if net < 0 else (255, 255, 255)
+            )
+            screen.blit(
+                font.render(
+                    f"{resources.RESOURCES[res_key]['name']}: {net:+}", True, color
+                ),
+                (btn_x, y),
+            )
+            y += font.get_height() + 2
+            for bname, lvl, amt, tone in sources.get(res_key, []):
+                tone_col = (0, 255, 0) if tone == "green" else (255, 100, 100)
+                screen.blit(
+                    font.render(f"  {bname} Lv{lvl}: {amt:+}", True, tone_col),
+                    (btn_x + 10, y),
+                )
+                y += font.get_height() + 2
+
     totals = defaultdict(int)
     for row in tile_data:
         for cell in row:
