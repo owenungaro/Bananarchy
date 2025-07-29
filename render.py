@@ -1,20 +1,13 @@
 import pygame, world, config
-from texture import create_ground_texture
 
 # unpack config
 MARGIN_RATIO = config.TILE_MARGIN_RATIO
 OUTLINE_COLOR = config.COLORS["outline"]
 HIGHLIGHT_COLOR = config.COLORS["highlight"]
-SIDE_COLOR1 = config.COLORS["side1"]
-SIDE_COLOR2 = config.COLORS["side2"]
 SHADE_FACTOR = config.SIDE_SHADE_FACTOR
-
-_ground_tex = None
-_ground_size = (0, 0)
 
 
 def calculate_scaling(sw: int, sh: int):
-    """Based on map dims & margin, compute tile w/h and origin."""
     mw, mh = config.MAP_WIDTH, config.MAP_HEIGHT
     usable_w = sw * (1 - 2 * MARGIN_RATIO)
     usable_h = sh * (1 - 2 * MARGIN_RATIO)
@@ -40,7 +33,6 @@ def point_in_diamond(mx, my, px, py, tw, th):
 
 
 def find_clicked_tile(mx, my, tw, th, ox, oy):
-    """Brute-force map scan; uses config.MAP_* internally."""
     mw, mh = config.MAP_WIDTH, config.MAP_HEIGHT
     for yy in range(mh):
         for xx in range(mw):
@@ -51,81 +43,80 @@ def find_clicked_tile(mx, my, tw, th, ox, oy):
 
 
 def draw_block(screen, x, y, cell, tw, th, ox, oy):
-    global _ground_tex, _ground_size
     px, py = grid_to_screen(x, y, tw, th, ox, oy)
     side_h = th // 2
 
-    # regen ground texture if needed
-    if _ground_size != (tw, th):
-        _ground_tex = create_ground_texture(tw, th)
-        _ground_size = (tw, th)
-
+    # corners of the diamond
     top = (px + tw // 2, py)
-    left = (px, py + th // 2)
-    bottom = (px + tw // 2, py + th)
     right = (px + tw, py + th // 2)
+    bottom = (px + tw // 2, py + th)
+    left = (px, py + th // 2)
 
-    # draw either painted terrain or beveled ground
-    if cell["terrain"]:
-        t = world.TERRAINS[cell["terrain"]]
-        col = t.color
-        # 3D sides
-        left_face = [
-            left,
-            bottom,
-            (bottom[0], bottom[1] + side_h),
-            (left[0], left[1] + side_h),
-        ]
-        right_face = [
-            right,
-            bottom,
-            (bottom[0], bottom[1] + side_h),
-            (right[0], right[1] + side_h),
-        ]
-        shade = tuple(max(int(c * SHADE_FACTOR), 0) for c in col)
-        pygame.draw.polygon(screen, shade, left_face)
-        pygame.draw.polygon(screen, col, right_face)
-        pygame.draw.polygon(screen, col, [top, right, bottom, left])
-    else:
-        # default ground
-        left_face = [
-            left,
-            bottom,
-            (bottom[0], bottom[1] + side_h),
-            (left[0], left[1] + side_h),
-        ]
-        right_face = [
-            right,
-            bottom,
-            (bottom[0], bottom[1] + side_h),
-            (right[0], right[1] + side_h),
-        ]
-        pygame.draw.polygon(screen, SIDE_COLOR1, left_face)
-        pygame.draw.polygon(screen, SIDE_COLOR2, right_face)
-        mask = pygame.Surface((tw, th), pygame.SRCALPHA)
-        pygame.draw.polygon(
-            mask,
-            (255, 255, 255),
-            [(0, th // 2), (tw // 2, 0), (tw, th // 2), (tw // 2, th)],
-        )
-        tex = _ground_tex.copy()
-        tex.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
-        screen.blit(tex, (px, py))
+    # center point for splitting
+    cx, cy = px + tw // 2, py + th // 2
+
+    # get base color
+    terrain = world.TERRAINS[cell["terrain"]]
+    base_col = terrain.color
+
+    # choose facet multipliers (light from top-left)
+    # order: top→right→bottom→left
+    # top facet faces the light best, bottom faces it least
+    fac_mul = [1.00, 0.85, 0.75, 0.90]
+
+    # build facets
+    facets = [
+        ([top, (cx, cy), right], fac_mul[0]),
+        ([right, (cx, cy), bottom], fac_mul[1]),
+        ([bottom, (cx, cy), left], fac_mul[2]),
+        ([left, (cx, cy), top], fac_mul[3]),
+    ]
+
+    # draw side faces
+    left_col = tuple(int(c * SHADE_FACTOR) for c in base_col)
+    right_col = tuple(int(c * (SHADE_FACTOR + 0.1)) for c in base_col)
+    bottom_left_face = [
+        left,
+        bottom,
+        (bottom[0], bottom[1] + side_h),
+        (left[0], left[1] + side_h),
+    ]
+    bottom_right_face = [
+        right,
+        bottom,
+        (bottom[0], bottom[1] + side_h),
+        (right[0], right[1] + side_h),
+    ]
+    pygame.draw.polygon(screen, left_col, bottom_left_face)
+    pygame.draw.polygon(screen, right_col, bottom_right_face)
+
+    # draw top‑face facets
+    for pts, m in facets:
+        col = tuple(int(c * m) for c in base_col)
+        pygame.draw.polygon(screen, col, pts)
 
     # outline
     pygame.draw.polygon(screen, OUTLINE_COLOR, [top, right, bottom, left], width=1)
 
-    # building icon
+    # building icon (unchanged)
     bld = cell["building"]
     if bld:
-        cx, cy, sz = px + tw // 2, py + th // 2, tw // 4
+        icon_cx = px + tw // 2
+        icon_cy = py + th // 2
+        sz = tw // 4
         if bld.shape == "square":
-            sz = sz // 2
-            pygame.draw.rect(screen, bld.color, (cx - sz, cy - sz, 2 * sz, 2 * sz))
+            h = sz // 2
+            pygame.draw.rect(
+                screen, bld.color, (icon_cx - h, icon_cy - h, 2 * h, 2 * h)
+            )
         elif bld.shape == "circle":
-            pygame.draw.circle(screen, bld.color, (cx, cy), sz // 2)
+            pygame.draw.circle(screen, bld.color, (icon_cx, icon_cy), sz // 2)
         elif bld.shape == "triangle":
-            pts = [(cx, cy - sz), (cx - sz, cy + sz), (cx + sz, cy + sz)]
+            pts = [
+                (icon_cx, icon_cy - sz),
+                (icon_cx - sz, icon_cy + sz),
+                (icon_cx + sz, icon_cy + sz),
+            ]
             pygame.draw.polygon(screen, bld.color, pts)
 
 
