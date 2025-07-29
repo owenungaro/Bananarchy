@@ -20,6 +20,7 @@ PAGE_INFO = 2
 PAGE_STATS = 3
 current_page = PAGE_TOOLS
 info_cell = None
+expanded_resource = None
 
 running = True
 while running:
@@ -54,7 +55,7 @@ while running:
                     current_page = PAGE_STATS
                 elif current_page == PAGE_INFO and info_cell:
                     line_count = 4
-                    start_y = btn_y + 3 * btn_h
+                    start_y = btn_y + 4 * btn_h
                     text_y = start_y + line_count * (font.get_height() + 2)
                     up_x = btn_x
                     up_y = text_y + config.PANEL_PADDING
@@ -69,6 +70,21 @@ while running:
                     idx = (my - start_y) // (config.ICON_SIZE + config.PANEL_PADDING)
                     if 0 <= idx < len(world.TOOLS):
                         world.set_selected_tool(idx)
+                elif current_page == PAGE_STATS:
+                    # Detect which resource was clicked
+                    y = btn_y + 4 * btn_h
+                    for res_key in resources.RESOURCES:
+                        rect = pygame.Rect(
+                            btn_x, y, config.PANEL_WIDTH, font.get_height()
+                        )
+                        if rect.collidepoint(mx, my):
+                            expanded_resource = (
+                                res_key if expanded_resource != res_key else None
+                            )
+                        y += font.get_height() + 2
+                        if expanded_resource == res_key:
+                            for _ in range(3):  # space for a few lines of building info
+                                y += font.get_height() + 2
             else:
                 gx, gy = render.find_clicked_tile(mx, my, tw, th, ox, oy)
                 if gx is not None:
@@ -184,7 +200,6 @@ while running:
         y = btn_y + 4 * btn_h
         totals = defaultdict(int)
         sources = defaultdict(list)
-
         for row in tile_data:
             for cell in row:
                 b = cell["building"]
@@ -214,14 +229,16 @@ while running:
                 (btn_x, y),
             )
             y += font.get_height() + 2
-            for bname, lvl, amt, tone in sources.get(res_key, []):
-                tone_col = (0, 255, 0) if tone == "green" else (255, 100, 100)
-                screen.blit(
-                    font.render(f"  {bname} Lv{lvl}: {amt:+}", True, tone_col),
-                    (btn_x + 10, y),
-                )
-                y += font.get_height() + 2
+            if res_key == expanded_resource:
+                for bname, lvl, amt, tone in sources.get(res_key, []):
+                    tone_col = (0, 255, 0) if tone == "green" else (255, 100, 100)
+                    screen.blit(
+                        font.render(f"  {bname} Lv{lvl}: {amt:+}", True, tone_col),
+                        (btn_x + 10, y),
+                    )
+                    y += font.get_height() + 2
 
+    # Top-left resource count
     totals = defaultdict(int)
     for row in tile_data:
         for cell in row:
