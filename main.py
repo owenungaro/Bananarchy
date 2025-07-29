@@ -211,7 +211,7 @@ while running:
                     totals[res] += net
                     sources[res].append((b.name, lvl, net, "green"))
                 for res, amt in b.inputs.items():
-                    cost = amt * lvl
+                    cost = amt * (2 ** (lvl - 1))
                     totals[res] -= cost
                     sources[res].append((b.name, lvl, -cost, "red"))
 
